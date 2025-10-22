@@ -1,0 +1,59 @@
+name: SaveHydro ML Auto Deploy
+
+# ------------------------------------------------
+# Triggers
+# ------------------------------------------------
+on:
+  push:
+    branches: [ main ]        # Trigger when you push to main
+  schedule:
+    - cron: "*/30 * * * *"    # Every 30 minutes
+  workflow_dispatch:          # Allow manual run from GitHub UI
+
+# ------------------------------------------------
+# Environment
+# ------------------------------------------------
+env:
+  PROJECT_ID: savehydro
+  REGION: asia-south1
+  SERVICE: savehydro-ml
+
+# ------------------------------------------------
+# Main Job
+# ------------------------------------------------
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Step 1️⃣ - Checkout Repository
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # Step 2️⃣ - Set up Google Cloud SDK
+    - name: Set up Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ env.PROJECT_ID }}
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        export_default_credentials: true
+
+    # Step 3️⃣ - Install Python Dependencies
+    - name: Install Python dependencies
+      run: pip install -r requirements.txt
+
+    # Step 4️⃣ - Retrain ML Model
+    - name: Retrain SaveHydro Model
+      run: python train_model.py
+
+    # Step 5️⃣ - Build Docker Image
+    - name: Build and Push Docker Image
+      run: gcloud builds submit --tag gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }}
+
+    # Step 6️⃣ - Deploy to Cloud Run
+    - name: Deploy to Cloud Run
+      run: gcloud run deploy ${{ env.SERVICE }} \
+            --image gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE }} \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated
